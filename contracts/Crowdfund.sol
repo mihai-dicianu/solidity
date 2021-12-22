@@ -21,6 +21,10 @@ contract CrowdFund{
         mapping(address => bool) voters;
     }
 
+    event ContributeEvent(address _sender, uint _value);
+    event CreateRequestEvent(string _description, address _recipient, uint _value);
+    event MakePaymentEvent(address _recipient, uint _value);
+
     mapping(uint => Request) public requests; 
     uint noOfRequests;
 
@@ -49,12 +53,13 @@ contract CrowdFund{
     function contribute() public payable running{
         require(msg.value > minContribution, "Minimum contribution not met");
 
-        if(contributors[msg.sender] != 0){
+        if(contributors[msg.sender] == 0){
             noOfContributors++;
         }
 
         contributors[msg.sender] += msg.value;
         raisedAmount += msg.value;
+        emit ContributeEvent(msg.sender, msg.value);
     }
 
     receive() payable external running{
@@ -79,6 +84,7 @@ contract CrowdFund{
         currentRequest.recipient = _recipient;
         currentRequest.completed = false;
         currentRequest.noOfVoters = 0;
+        emit CreateRequestEvent(_description, _recipient, _value);
     }
 
     modifier onlyContributors(){
@@ -88,25 +94,22 @@ contract CrowdFund{
 
     function voteRequest(uint noOfRequest) public onlyContributors{
         Request storage currentRequest = requests[noOfRequest];
-        if(currentRequest.voters[msg.sender] == true){
-
-        }
-        else{
-            currentRequest.noOfVoters++;
-            currentRequest.voters[msg.sender] = true;
-        }
-        
+        require(currentRequest.voters[msg.sender] == false, "You already voted!");
+        currentRequest.noOfVoters++;
+        currentRequest.voters[msg.sender] = true;     
     }
 
-    function request(uint noOfRequest) public adminOnly{
+    function makePayment(uint noOfRequest) public adminOnly{
+        require(raisedAmount >= goal);
         Request storage currentRequest = requests[noOfRequest];
+        require(currentRequest.completed == false, "The request has already been completed");
 
         if(currentRequest.noOfVoters > noOfContributors/2){
             currentRequest.completed = true;
             payable(currentRequest.recipient).transfer(currentRequest.value);
+            emit MakePaymentEvent(currentRequest.recipient, currentRequest.value);
         }
+        
     }
-
-
 
 }
