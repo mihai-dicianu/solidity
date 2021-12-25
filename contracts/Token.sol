@@ -16,14 +16,14 @@ interface ERC20Interface{
     event Approval(address indexed _owner, address indexed _spender, uint256 _value);
 }
 
-contract Cryptos is ERC20Interface{
+contract Token is ERC20Interface{
 
     string public name = "Baicoin";
     string public symbol = "BCN";
     uint public decimals = 0;
     uint public override totalSupply;
     address public founder;
-    
+
     mapping (address => uint) public balances;
 
     mapping (address => mapping(address => uint)) allowed;
@@ -46,7 +46,7 @@ contract Cryptos is ERC20Interface{
         return true;
     }
 
-    function transferFrom(address _from, address _to, uint256 _value) public override returns (bool success){
+    function transferFrom(address _from, address _to, uint256 _value) public override virtual returns (bool success){
         require(balances[_from] >= _value, "Insufficient funds!");
         require(allowed[_from][_to] >= _value);
 
@@ -62,7 +62,7 @@ contract Cryptos is ERC20Interface{
         return balances[_owner];
     }
 
-    function transfer(address _to, uint256 _value) public override returns (bool success){
+    function transfer(address _to, uint256 _value) public override virtual returns (bool success){
         require(balances[msg.sender] >= _value, "You don't have enough tokens!");
         balances[msg.sender] -= _value;
         balances[_to] += _value;
@@ -70,4 +70,99 @@ contract Cryptos is ERC20Interface{
         
         return true;
     }
+}
+
+contract ICO is Token{
+    address public admin;
+    address payable public deposit;
+
+    uint tokenPrice = 0.001 ether;
+    uint public hardCap = 300 ether;
+    uint public raisedAmount;
+    uint public saleStart = block.timestamp;
+    uint public saleEnd = saleStart + 1000;
+    uint public tokenTradeStart = saleEnd + 1000;
+    uint public minInvestment = 0.1 ether;
+    uint public maxInvestment = 5 ether;
+
+    enum State {beforeStart, running, afterEnd, halted}
+    State public icoState;
+
+    constructor(address payable _deposit){
+        admin = msg.sender;
+        deposit = _deposit;
+        icoState = State.beforeStart;
+    }
+
+    modifier onlyAdmin(){
+        require(msg.sender == admin, "You must be the admin!");
+        _;
+    }
+
+    function halt() public onlyAdmin{
+        icoState = State.halted;
+    }
+    
+    function resume() public onlyAdmin{
+        icoState = State.running;
+    }
+
+    function changeDeposit(address payable _deposit) public onlyAdmin{
+        deposit = _deposit;
+    }
+
+    function getIcoState() public view returns(State){
+        if(icoState == State.halted){
+            return State.halted;
+        }else if(block.timestamp < saleStart){
+            return State.beforeStart;
+        }else if(block.timestamp > saleStart && block.timestamp < saleEnd){
+            return State.running;
+        }else{
+            return State.afterEnd;
+        }
+    }
+
+    event Invest(address investor, uint value, uint tokens);
+
+    function invest() public payable returns(bool){
+        icoState = getIcoState();
+        require(icoState == State.running, "ICO must be running to invest!");
+        require(msg.value >= minInvestment && msg.value <= maxInvestment, "Investment must be in the valid range!");
+        
+        raisedAmount += msg.value;  
+        require(raisedAmount < hardCap, "Hardcap has been reached!");
+        
+        uint tokens = msg.value / (tokenPrice * 1000000000000000000);
+        balances[msg.sender] += tokens;
+        balances[founder] -= tokens;
+
+        deposit.transfer(msg.value);
+        emit Invest(msg.sender, msg.value, tokens);
+
+        return true;
+    }
+
+    receive() external payable{
+        invest();
+    }
+
+    function transferFrom(address _from, address _to, uint256 _value) public override virtual returns (bool success){
+        require(block.timestamp > tokenTradeStart, "Tokens are locked");
+        return Token.transferFrom(_from, _to, _value);
+    }
+
+    function transfer(address _to, uint256 _value) public override returns (bool success){
+        require(block.timestamp > tokenTradeStart, "Tokens are locked");
+        return super.transfer(_to, _value);        
+    }
+
+    function burn() public returns(bool){
+        icoState = getIcoState();
+        require(icoState == State.afterEnd);
+        balances[founder] = 0;
+        return true;
+    }
+
+    
 }
