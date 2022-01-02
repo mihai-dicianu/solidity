@@ -133,7 +133,7 @@ contract ICO is Token{
         raisedAmount += msg.value;  
         require(raisedAmount < hardCap, "Hardcap has been reached!");
         
-        uint tokens = msg.value / (tokenPrice * 1000000000000000000);
+        uint tokens = msg.value / tokenPrice;
         balances[msg.sender] += tokens;
         balances[founder] -= tokens;
 
